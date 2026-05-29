@@ -38,7 +38,7 @@ final class MockObdTransport: ObdTransport {
         commandCount += 1
         eventContinuation.yield(.log(.outgoing(normalized)))
         try await Task.sleep(nanoseconds: UInt64.random(in: 45_000_000...145_000_000))
-        let response = mockResponse(for: normalized)
+        let response = mockResponse(for: normalized) + "\r>"
         eventContinuation.yield(.log(.incoming(response)))
         return response
     }

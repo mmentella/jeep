@@ -28,11 +28,12 @@ final class ObdDashboardViewModel: ObservableObject {
     @Published var logs: [DiagnosticLogEntry] = [.info("App avviata")]
     @Published var pidLabLogs: [PidLabLogEntry] = []
     @Published var pidLabStatus = "Solo comandi di lettura. Nessuna scrittura o codifica centralina."
+    @Published var connectionState: ObdConnectionState = .idle
 
     private var transport: ObdTransport?
     private var client: Elm327Client?
     private var eventsTask: Task<Void, Never>?
-    private var pollingTask: Task<Void, Never>?
+    private let pollingScheduler = ObdPollingScheduler()
     private let transportFactory: TransportFactory
 
     init(transportFactory: TransportFactory? = nil) {
@@ -41,15 +42,17 @@ final class ObdDashboardViewModel: ObservableObject {
 
     func configureTransport() {
         eventsTask?.cancel()
-        pollingTask?.cancel()
+        pollingScheduler.stop()
         transport?.disconnect()
         let newTransport = transportFactory(adapterMode)
+        let queue = Elm327CommandQueue(transport: newTransport)
         transport = newTransport
-        client = Elm327Client(transport: newTransport)
+        client = Elm327Client(queue: queue)
         peripherals.removeAll()
         readings.removeAll()
         isConnected = false
         isPolling = false
+        connectionState = .idle
         status = adapterMode.title
 
         eventsTask = Task { [weak self] in
@@ -71,6 +74,7 @@ final class ObdDashboardViewModel: ObservableObject {
         if transport == nil {
             configureTransport()
         }
+        connectionState = .scanning
         transport?.startScanning()
     }
 
@@ -78,15 +82,19 @@ final class ObdDashboardViewModel: ObservableObject {
         guard let transport, let client else { return }
         Task {
             do {
+                connectionState = .connecting
                 status = "Connessione a \(peripheral.name)"
                 try await transport.connect(to: peripheral.id)
+                connectionState = .initializing
                 status = "Inizializzazione ELM327"
                 try await client.initialize()
                 isConnected = true
+                connectionState = .ready
                 status = "Connesso"
                 logs.append(.info("ELM327 inizializzato"))
                 startPolling()
             } catch {
+                connectionState = .failed(error.localizedDescription)
                 status = error.localizedDescription
                 logs.append(.error(error.localizedDescription))
             }
@@ -94,32 +102,26 @@ final class ObdDashboardViewModel: ObservableObject {
     }
 
     func disconnect() {
-        pollingTask?.cancel()
-        pollingTask = nil
+        pollingScheduler.stop()
         transport?.disconnect()
         isPolling = false
         isConnected = false
+        connectionState = .disconnected
         status = "Disconnesso"
     }
 
     func startPolling() {
         guard let client else { return }
-        pollingTask?.cancel()
         isPolling = true
-        pollingTask = Task {
-            while !Task.isCancelled {
-                for pid in ObdPid.allCases {
-                    do {
-                        let reading = try await client.read(pid)
-                        readings[pid] = reading
-                    } catch {
-                        logs.append(.error("\(pid.command): \(error.localizedDescription)"))
-                    }
-                    try? await Task.sleep(nanoseconds: 120_000_000)
-                }
-                try? await Task.sleep(nanoseconds: 600_000_000)
+        pollingScheduler.start(
+            client: client,
+            onReading: { [weak self] reading in
+                self?.readings[reading.pid] = reading
+            },
+            onError: { [weak self] pid, error in
+                self?.logs.append(.error("\(pid.command): \(error.localizedDescription)"))
             }
-        }
+        )
     }
 
     func clearLogs() {
@@ -157,18 +159,17 @@ final class ObdDashboardViewModel: ObservableObject {
             return
         }
 
-        let shouldRestartPolling = isPolling
-        pollingTask?.cancel()
-        pollingTask = nil
+        let shouldRestartPolling = pollingScheduler.isRunning
+        pollingScheduler.stop()
         isPolling = false
         pidLabStatus = "Invio \(command)"
 
         do {
-            let response = try await client.sendRawReadCommand(command)
+            let response = try await client.sendManualReadCommand(command)
             let entry = PidLabLogEntry(
                 adapterMode: adapterMode.title,
                 command: command,
-                response: response,
+                response: response.rawText,
                 isStandardRead: warning == nil,
                 warning: warning
             )
@@ -224,6 +225,7 @@ final class ObdDashboardViewModel: ObservableObject {
         case .disconnected(let reason):
             isConnected = false
             isPolling = false
+            connectionState = .disconnected
             status = reason.map { "Disconnesso: \($0)" } ?? "Disconnesso"
         case .log(let entry):
             logs.append(entry)

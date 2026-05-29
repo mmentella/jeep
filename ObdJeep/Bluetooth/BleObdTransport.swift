@@ -70,27 +70,16 @@ final class BleObdTransport: NSObject, ObdTransport {
         }
 
         responseBuffer.removeAll()
-        defer { pendingResponse.cancel(with: ObdTransportError.timeout) }
         emit(.log(.outgoing(command.trimmingCharacters(in: .whitespacesAndNewlines))))
-        return try await withThrowingTaskGroup(of: String.self) { group in
-            group.addTask {
-                try await self.pendingResponse.wait()
-            }
-            group.addTask {
-                try await Task.sleep(nanoseconds: 4_000_000_000)
-                throw ObdTransportError.timeout
-            }
-
+        return try await withTaskCancellationHandler {
             // BLE ELM327 adapters vary: some accept writeWithoutResponse only, while others
             // require write-with-response. Use the advertised characteristic property.
             let writeType: CBCharacteristicWriteType = writeCharacteristic.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
-            peripheral.writeValue(data, for: writeCharacteristic, type: writeType)
-
-            guard let response = try await group.next() else {
-                throw ObdTransportError.timeout
+            return try await pendingResponse.wait {
+                peripheral.writeValue(data, for: writeCharacteristic, type: writeType)
             }
-            group.cancelAll()
-            return response
+        } onCancel: {
+            pendingResponse.cancel(with: ObdTransportError.timeout)
         }
     }
 
@@ -182,9 +171,8 @@ extension BleObdTransport: CBPeripheralDelegate {
         responseBuffer.append(data)
         guard let chunk = String(data: responseBuffer, encoding: .ascii) else { return }
         if chunk.contains(">") {
-            let cleaned = chunk.replacingOccurrences(of: ">", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-            emit(.log(.incoming(cleaned)))
-            pendingResponse.resume(with: cleaned)
+            emit(.log(.incoming(chunk.trimmingCharacters(in: .whitespacesAndNewlines))))
+            pendingResponse.resume(with: chunk)
             responseBuffer.removeAll()
         }
     }
@@ -193,9 +181,10 @@ extension BleObdTransport: CBPeripheralDelegate {
 private final class PendingResponse {
     private var continuation: CheckedContinuation<String, Error>?
 
-    func wait() async throws -> String {
+    func wait(start: () -> Void) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
+            start()
         }
     }
 

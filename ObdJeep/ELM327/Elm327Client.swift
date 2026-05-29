@@ -1,27 +1,33 @@
 import Foundation
 
 final class Elm327Client {
-    private let transport: ObdTransport
+    private let queue: Elm327CommandQueue
 
-    init(transport: ObdTransport) {
-        self.transport = transport
+    init(queue: Elm327CommandQueue) {
+        self.queue = queue
     }
 
     func initialize() async throws {
-        _ = try await transport.send("ATZ")
+        _ = try await queue.execute(Elm327Command(command: "ATZ", timeout: 5.0, source: .initialization))
         try await Task.sleep(nanoseconds: 800_000_000)
         for command in ["ATE0", "ATL0", "ATS0", "ATH0", "ATSP0"] {
-            _ = try await transport.send(command)
+            _ = try await queue.execute(Elm327Command(command: command, timeout: 2.0, expectedResponsePrefix: "OK", source: .initialization))
         }
     }
 
     func read(_ pid: ObdPid) async throws -> ObdReading {
-        let raw = try await transport.send(pid.command)
-        let value = try ObdValueParser.parse(rawResponse: raw, pid: pid)
-        return ObdReading(pid: pid, value: value, rawResponse: raw, date: Date())
+        let expected = String(format: "41%02X", pid.pidByte)
+        let response = try await queue.execute(Elm327Command(
+            command: pid.command,
+            timeout: 3.0,
+            expectedResponsePrefix: expected,
+            source: .polling
+        ))
+        let value = try ObdValueParser.parse(rawResponse: response.normalizedText, pid: pid)
+        return ObdReading(pid: pid, value: value, rawResponse: response.rawText, date: Date())
     }
 
-    func sendRawReadCommand(_ command: String) async throws -> String {
-        try await transport.send(ObdCommandPolicy.normalize(command))
+    func sendManualReadCommand(_ command: String) async throws -> Elm327Response {
+        try await queue.execute(Elm327Command(command: command, timeout: 5.0, source: .manual))
     }
 }

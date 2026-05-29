@@ -8,6 +8,8 @@ App iOS nativa SwiftUI per leggere PID OBD-II standard tramite adattatore OBD BL
 - `ObdJeep/Bluetooth/BleObdTransport.swift`: trasporto CoreBluetooth BLE reale.
 - `ObdJeep/Bluetooth/MockObdTransport.swift`: simulatore ELM327 locale con valori realistici e variabili.
 - `ObdJeep/ELM327/Elm327Client.swift`: inizializzazione ELM327 e invio comandi.
+- `ObdJeep/ELM327/Elm327CommandQueue.swift`: actor seriale che garantisce un solo comando ELM327 in-flight.
+- `ObdJeep/ELM327/Elm327FrameParser.swift`: parser raw ELM327 a frame con errori tipizzati.
 - `ObdJeep/OBD/ObdPid.swift`: PID standard supportati.
 - `ObdJeep/OBD/CustomObdPid.swift`: modello dati per futuri PID custom Jeep/4xe.
 - `ObdJeep/OBD/ObdCommandPolicy.swift`: protezioni read-only per il PID Lab.
@@ -64,6 +66,18 @@ In Xcode:
 2. Premi `Command-U`.
 
 I test coprono le formule dei PID standard, rumore ELM327 come `SEARCHING...`, casi di errore come `NO DATA` e la policy di sicurezza del PID Lab.
+
+## P0 hardening
+
+Il core ELM327 usa ora una command queue seriale:
+
+- polling automatico, init e PID Lab passano tutti da `Elm327CommandQueue`;
+- ogni comando ha timeout, source e optional expected response prefix;
+- il transport BLE/mock resta raw I/O e non viene chiamato direttamente dalla UI;
+- il PID Lab sospende il polling, invia il comando manuale tramite queue e poi riattiva il polling;
+- `Elm327FrameParser` conserva raw text e normalized text e produce errori tipizzati per `NO DATA`, `STOPPED`, `BUS ERROR`, `CAN ERROR`, `UNABLE TO CONNECT`, timeout e frame malformati.
+
+Design dettagliato: `docs/elm327_command_queue.md`.
 
 ## Test su iPhone reale
 

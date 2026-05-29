@@ -27,6 +27,14 @@
 		A10000000000000000000014 /* PidLabExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* PidLabExport.swift */; };
 		A10000000000000000000015 /* PidLabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* PidLabView.swift */; };
 		A10000000000000000000016 /* ObdCommandPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* ObdCommandPolicyTests.swift */; };
+		A10000000000000000000017 /* Elm327Command.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* Elm327Command.swift */; };
+		A10000000000000000000018 /* Elm327Error.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* Elm327Error.swift */; };
+		A10000000000000000000019 /* Elm327FrameParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* Elm327FrameParser.swift */; };
+		A1000000000000000000001A /* Elm327CommandQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* Elm327CommandQueue.swift */; };
+		A1000000000000000000001B /* ObdPollingScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* ObdPollingScheduler.swift */; };
+		A1000000000000000000001C /* ObdConnectionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001C /* ObdConnectionState.swift */; };
+		A1000000000000000000001D /* Elm327FrameParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001D /* Elm327FrameParserTests.swift */; };
+		A1000000000000000000001E /* Elm327CommandQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001E /* Elm327CommandQueueTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -62,6 +70,14 @@
 		A20000000000000000000014 /* PidLabExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PidLabExport.swift; sourceTree = "<group>"; };
 		A20000000000000000000015 /* PidLabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PidLabView.swift; sourceTree = "<group>"; };
 		A20000000000000000000016 /* ObdCommandPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObdCommandPolicyTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000017 /* Elm327Command.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Elm327Command.swift; sourceTree = "<group>"; };
+		A20000000000000000000018 /* Elm327Error.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Elm327Error.swift; sourceTree = "<group>"; };
+		A20000000000000000000019 /* Elm327FrameParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Elm327FrameParser.swift; sourceTree = "<group>"; };
+		A2000000000000000000001A /* Elm327CommandQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Elm327CommandQueue.swift; sourceTree = "<group>"; };
+		A2000000000000000000001B /* ObdPollingScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObdPollingScheduler.swift; sourceTree = "<group>"; };
+		A2000000000000000000001C /* ObdConnectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObdConnectionState.swift; sourceTree = "<group>"; };
+		A2000000000000000000001D /* Elm327FrameParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Elm327FrameParserTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000001E /* Elm327CommandQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Elm327CommandQueueTests.swift; sourceTree = "<group>"; };
 		A60000000000000000000001 /* ObdJeep.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ObdJeep.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A60000000000000000000002 /* ObdJeepTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ObdJeepTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -98,10 +114,10 @@
 		A80000000000000000000003 /* App */ = {isa = PBXGroup; children = (A20000000000000000000001 /* ObdJeepApp.swift */, A2000000000000000000000F /* Info.plist */); path = App; sourceTree = "<group>"; };
 		A80000000000000000000004 /* Bluetooth */ = {isa = PBXGroup; children = (A20000000000000000000002 /* ObdTransport.swift */, A20000000000000000000003 /* BleObdTransport.swift */, A20000000000000000000004 /* MockObdTransport.swift */); path = Bluetooth; sourceTree = "<group>"; };
 		A80000000000000000000005 /* Diagnostics */ = {isa = PBXGroup; children = (A20000000000000000000005 /* DiagnosticLogEntry.swift */, A20000000000000000000013 /* PidLabLogEntry.swift */, A20000000000000000000014 /* PidLabExport.swift */); path = Diagnostics; sourceTree = "<group>"; };
-		A80000000000000000000006 /* ELM327 */ = {isa = PBXGroup; children = (A20000000000000000000006 /* Elm327Client.swift */); path = ELM327; sourceTree = "<group>"; };
-		A80000000000000000000007 /* OBD */ = {isa = PBXGroup; children = (A20000000000000000000007 /* ObdPid.swift */, A20000000000000000000008 /* ObdValueParser.swift */, A20000000000000000000011 /* CustomObdPid.swift */, A20000000000000000000012 /* ObdCommandPolicy.swift */); path = OBD; sourceTree = "<group>"; };
+		A80000000000000000000006 /* ELM327 */ = {isa = PBXGroup; children = (A20000000000000000000006 /* Elm327Client.swift */, A20000000000000000000017 /* Elm327Command.swift */, A20000000000000000000018 /* Elm327Error.swift */, A20000000000000000000019 /* Elm327FrameParser.swift */, A2000000000000000000001A /* Elm327CommandQueue.swift */); path = ELM327; sourceTree = "<group>"; };
+		A80000000000000000000007 /* OBD */ = {isa = PBXGroup; children = (A20000000000000000000007 /* ObdPid.swift */, A20000000000000000000008 /* ObdValueParser.swift */, A20000000000000000000011 /* CustomObdPid.swift */, A20000000000000000000012 /* ObdCommandPolicy.swift */, A2000000000000000000001B /* ObdPollingScheduler.swift */, A2000000000000000000001C /* ObdConnectionState.swift */); path = OBD; sourceTree = "<group>"; };
 		A80000000000000000000008 /* UI */ = {isa = PBXGroup; children = (A20000000000000000000009 /* ObdDashboardViewModel.swift */, A2000000000000000000000A /* ContentView.swift */, A2000000000000000000000B /* DashboardView.swift */, A2000000000000000000000C /* GaugeCard.swift */, A2000000000000000000000D /* DiagnosticsView.swift */, A20000000000000000000015 /* PidLabView.swift */); path = UI; sourceTree = "<group>"; };
-		A80000000000000000000009 /* ObdJeepTests */ = {isa = PBXGroup; children = (A2000000000000000000000E /* ObdValueParserTests.swift */, A20000000000000000000016 /* ObdCommandPolicyTests.swift */); path = ObdJeepTests; sourceTree = "<group>"; };
+		A80000000000000000000009 /* ObdJeepTests */ = {isa = PBXGroup; children = (A2000000000000000000000E /* ObdValueParserTests.swift */, A20000000000000000000016 /* ObdCommandPolicyTests.swift */, A2000000000000000000001D /* Elm327FrameParserTests.swift */, A2000000000000000000001E /* Elm327CommandQueueTests.swift */); path = ObdJeepTests; sourceTree = "<group>"; };
 		A8000000000000000000000A /* Products */ = {isa = PBXGroup; children = (A60000000000000000000001 /* ObdJeep.app */, A60000000000000000000002 /* ObdJeepTests.xctest */); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
@@ -183,10 +199,16 @@
 				A10000000000000000000013 /* PidLabLogEntry.swift in Sources */,
 				A10000000000000000000014 /* PidLabExport.swift in Sources */,
 				A10000000000000000000015 /* PidLabView.swift in Sources */,
+				A10000000000000000000017 /* Elm327Command.swift in Sources */,
+				A10000000000000000000018 /* Elm327Error.swift in Sources */,
+				A10000000000000000000019 /* Elm327FrameParser.swift in Sources */,
+				A1000000000000000000001A /* Elm327CommandQueue.swift in Sources */,
+				A1000000000000000000001B /* ObdPollingScheduler.swift in Sources */,
+				A1000000000000000000001C /* ObdConnectionState.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		AA0000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A1000000000000000000000E /* ObdValueParserTests.swift in Sources */, A10000000000000000000016 /* ObdCommandPolicyTests.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
+		AA0000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A1000000000000000000000E /* ObdValueParserTests.swift in Sources */, A10000000000000000000016 /* ObdCommandPolicyTests.swift in Sources */, A1000000000000000000001D /* Elm327FrameParserTests.swift in Sources */, A1000000000000000000001E /* Elm327CommandQueueTests.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
