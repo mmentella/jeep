@@ -2,16 +2,40 @@ import Foundation
 
 actor Elm327CommandQueue {
     private let transport: ObdTransport
+    private var isExecuting = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
 
     init(transport: ObdTransport) {
         self.transport = transport
     }
 
     func execute(_ command: Elm327Command) async throws -> Elm327Response {
+        await acquire()
+        defer { release() }
+
         let raw = try await withTimeout(seconds: command.timeout, command: command.command) {
             try await self.transport.send(command.command)
         }
         return try Elm327FrameParser.parse(rawText: raw, command: command)
+    }
+
+    private func acquire() async {
+        if !isExecuting {
+            isExecuting = true
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    private func release() {
+        if waiters.isEmpty {
+            isExecuting = false
+        } else {
+            waiters.removeFirst().resume()
+        }
     }
 
     private func withTimeout<T>(
