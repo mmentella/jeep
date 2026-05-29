@@ -56,20 +56,8 @@ enum ObdValueParser {
             throw ObdParsingError.negativeResponse(rawResponse)
         }
 
-        let compact = normalized
-            .components(separatedBy: CharacterSet.whitespacesAndNewlines)
-            .joined()
-        guard compact.count >= 4, compact.count.isMultiple(of: 2) else {
-            throw ObdParsingError.malformedResponse(rawResponse)
-        }
-
-        let bytes = stride(from: 0, to: compact.count, by: 2).compactMap { index -> UInt8? in
-            let start = compact.index(compact.startIndex, offsetBy: index)
-            let end = compact.index(start, offsetBy: 2)
-            return UInt8(compact[start..<end], radix: 16)
-        }
-
-        guard bytes.count * 2 == compact.count else {
+        let bytes = try tokenizeBytes(from: normalized, rawResponse: rawResponse)
+        guard bytes.count >= 2 else {
             throw ObdParsingError.malformedResponse(rawResponse)
         }
 
@@ -87,5 +75,46 @@ enum ObdValueParser {
         guard bytes.count >= count else {
             throw ObdParsingError.insufficientBytes(expected: count, actual: bytes.count)
         }
+    }
+
+    private static func tokenizeBytes(from normalized: String, rawResponse: String) throws -> [UInt8] {
+        let tokens = normalized.components(separatedBy: CharacterSet.whitespacesAndNewlines).filter { !$0.isEmpty }
+        if tokens.count > 1 {
+            var bytes: [UInt8] = []
+            for token in tokens {
+                if token.count == 3, UInt16(token, radix: 16) != nil {
+                    continue
+                }
+                if token.count == 2, let byte = UInt8(token, radix: 16) {
+                    bytes.append(byte)
+                    continue
+                }
+                if token.count > 2, token.count.isMultiple(of: 2) {
+                    bytes.append(contentsOf: try parseCompactHex(token, rawResponse: rawResponse))
+                    continue
+                }
+                throw ObdParsingError.malformedResponse(rawResponse)
+            }
+            return bytes
+        }
+
+        return try parseCompactHex(tokens.joined(), rawResponse: rawResponse)
+    }
+
+    private static func parseCompactHex(_ compact: String, rawResponse: String) throws -> [UInt8] {
+        guard compact.count >= 4, compact.count.isMultiple(of: 2) else {
+            throw ObdParsingError.malformedResponse(rawResponse)
+        }
+
+        let bytes = stride(from: 0, to: compact.count, by: 2).compactMap { index -> UInt8? in
+            let start = compact.index(compact.startIndex, offsetBy: index)
+            let end = compact.index(start, offsetBy: 2)
+            return UInt8(compact[start..<end], radix: 16)
+        }
+
+        guard bytes.count * 2 == compact.count else {
+            throw ObdParsingError.malformedResponse(rawResponse)
+        }
+        return bytes
     }
 }
