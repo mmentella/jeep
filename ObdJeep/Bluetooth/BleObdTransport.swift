@@ -9,9 +9,10 @@ final class BleObdTransport: NSObject, ObdTransport {
     private var connectedPeripheral: CBPeripheral?
     private var writeCharacteristic: CBCharacteristic?
     private var notifyCharacteristic: CBCharacteristic?
-    private var pendingResponse = PendingResponse()
+    private let pendingResponse = PendingResponse()
+    private let connectContinuation = OneShotContinuation<Void>()
+    private let responseBufferQueue = DispatchQueue(label: "com.obdjeep.ble.response-buffer")
     private var responseBuffer = Data()
-    private var connectContinuation: CheckedContinuation<Void, Error>?
 
     var events: AsyncStream<ObdTransportEvent> { eventStream }
 
@@ -44,8 +45,7 @@ final class BleObdTransport: NSObject, ObdTransport {
         stopScanning()
         connectedPeripheral = peripheral
         peripheral.delegate = self
-        try await withCheckedThrowingContinuation { continuation in
-            connectContinuation = continuation
+        try await connectContinuation.wait {
             central.connect(peripheral, options: nil)
         }
     }
@@ -57,6 +57,7 @@ final class BleObdTransport: NSObject, ObdTransport {
         connectedPeripheral = nil
         writeCharacteristic = nil
         notifyCharacteristic = nil
+        connectContinuation.cancel(with: ObdTransportError.notConnected)
         pendingResponse.cancel(with: ObdTransportError.notConnected)
     }
 
@@ -69,7 +70,7 @@ final class BleObdTransport: NSObject, ObdTransport {
             throw ObdTransportError.invalidEncoding
         }
 
-        responseBuffer.removeAll()
+        clearResponseBuffer()
         emit(.log(.outgoing(command.trimmingCharacters(in: .whitespacesAndNewlines))))
         return try await withTaskCancellationHandler {
             // BLE ELM327 adapters vary: some accept writeWithoutResponse only, while others
@@ -89,16 +90,47 @@ final class BleObdTransport: NSObject, ObdTransport {
 
     private func finishDiscoveryIfReady(for peripheral: CBPeripheral) {
         guard writeCharacteristic != nil, notifyCharacteristic != nil else { return }
-        connectContinuation?.resume()
-        connectContinuation = nil
+        guard connectContinuation.resume(returning: ()) else { return }
         let name = peripheral.name ?? "OBD BLE"
         emit(.connected(ObdPeripheral(id: peripheral.identifier, name: name, rssi: 0)))
+    }
+
+    private func clearResponseBuffer() {
+        responseBufferQueue.sync {
+            responseBuffer.removeAll()
+        }
+    }
+
+    private func appendResponseData(_ data: Data) -> String? {
+        responseBufferQueue.sync {
+            responseBuffer.append(data)
+            guard let chunk = String(data: responseBuffer, encoding: .ascii), chunk.contains(">") else {
+                return nil
+            }
+            responseBuffer.removeAll()
+            return chunk
+        }
     }
 }
 
 extension BleObdTransport: CBCentralManagerDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         emit(.stateChanged(central.state.description))
+        switch central.state {
+        case .poweredOn, .unknown:
+            break
+        case .resetting, .unsupported, .unauthorized, .poweredOff:
+            connectContinuation.cancel(with: ObdTransportError.bluetoothUnavailable(central.state.description))
+            pendingResponse.cancel(with: ObdTransportError.bluetoothUnavailable(central.state.description))
+            connectedPeripheral = nil
+            writeCharacteristic = nil
+            notifyCharacteristic = nil
+            clearResponseBuffer()
+        @unknown default:
+            connectContinuation.cancel(with: ObdTransportError.bluetoothUnavailable(central.state.description))
+            pendingResponse.cancel(with: ObdTransportError.bluetoothUnavailable(central.state.description))
+            clearResponseBuffer()
+        }
     }
 
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
@@ -114,11 +146,15 @@ extension BleObdTransport: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-        connectContinuation?.resume(throwing: error ?? ObdTransportError.peripheralNotFound)
-        connectContinuation = nil
+        connectContinuation.cancel(with: error ?? ObdTransportError.peripheralNotFound)
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        connectedPeripheral = nil
+        writeCharacteristic = nil
+        notifyCharacteristic = nil
+        clearResponseBuffer()
+        connectContinuation.cancel(with: error ?? ObdTransportError.notConnected)
         pendingResponse.cancel(with: error ?? ObdTransportError.notConnected)
         emit(.disconnected(error?.localizedDescription))
     }
@@ -127,13 +163,11 @@ extension BleObdTransport: CBCentralManagerDelegate {
 extension BleObdTransport: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         if let error {
-            connectContinuation?.resume(throwing: error)
-            connectContinuation = nil
+            connectContinuation.cancel(with: error)
             return
         }
         guard let services = peripheral.services, !services.isEmpty else {
-            connectContinuation?.resume(throwing: ObdTransportError.serviceNotFound)
-            connectContinuation = nil
+            connectContinuation.cancel(with: ObdTransportError.serviceNotFound)
             return
         }
         services.forEach { peripheral.discoverCharacteristics(nil, for: $0) }
@@ -141,8 +175,7 @@ extension BleObdTransport: CBPeripheralDelegate {
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         if let error {
-            connectContinuation?.resume(throwing: error)
-            connectContinuation = nil
+            connectContinuation.cancel(with: error)
             return
         }
 
@@ -168,34 +201,71 @@ extension BleObdTransport: CBPeripheralDelegate {
             return
         }
         guard let data = characteristic.value else { return }
-        responseBuffer.append(data)
-        guard let chunk = String(data: responseBuffer, encoding: .ascii) else { return }
-        if chunk.contains(">") {
-            emit(.log(.incoming(chunk.trimmingCharacters(in: .whitespacesAndNewlines))))
-            pendingResponse.resume(with: chunk)
-            responseBuffer.removeAll()
-        }
+        guard let chunk = appendResponseData(data) else { return }
+        emit(.log(.incoming(chunk.trimmingCharacters(in: .whitespacesAndNewlines))))
+        pendingResponse.resume(with: chunk)
     }
 }
 
 private final class PendingResponse {
-    private var continuation: CheckedContinuation<String, Error>?
+    private let storage = OneShotContinuation<String>()
 
     func wait(start: () -> Void) async throws -> String {
+        try await storage.wait(start: start)
+    }
+
+    @discardableResult
+    func resume(with value: String) -> Bool {
+        storage.resume(returning: value)
+    }
+
+    @discardableResult
+    func cancel(with error: Error) -> Bool {
+        storage.cancel(with: error)
+    }
+}
+
+private final class OneShotContinuation<Value> {
+    private let queue = DispatchQueue(label: "com.obdjeep.ble.one-shot-continuation")
+    private var continuation: CheckedContinuation<Value, Error>?
+
+    func wait(start: () -> Void) async throws -> Value {
         try await withCheckedThrowingContinuation { continuation in
-            self.continuation = continuation
+            let accepted = queue.sync { () -> Bool in
+                guard self.continuation == nil else { return false }
+                self.continuation = continuation
+                return true
+            }
+
+            guard accepted else {
+                continuation.resume(throwing: ObdTransportError.timeout)
+                return
+            }
+
             start()
         }
     }
 
-    func resume(with value: String) {
-        continuation?.resume(returning: value)
-        continuation = nil
+    @discardableResult
+    func resume(returning value: Value) -> Bool {
+        guard let continuation = takeContinuation() else { return false }
+        continuation.resume(returning: value)
+        return true
     }
 
-    func cancel(with error: Error) {
-        continuation?.resume(throwing: error)
-        continuation = nil
+    @discardableResult
+    func cancel(with error: Error) -> Bool {
+        guard let continuation = takeContinuation() else { return false }
+        continuation.resume(throwing: error)
+        return true
+    }
+
+    private func takeContinuation() -> CheckedContinuation<Value, Error>? {
+        queue.sync {
+            let continuation = self.continuation
+            self.continuation = nil
+            return continuation
+        }
     }
 }
 
